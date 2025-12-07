@@ -2,6 +2,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 
 const app = express();
@@ -9,18 +10,38 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,                 // max requests
+  message: { error: "Too many requests, slow down." }
+});
+app.use(limiter); 
+
+// Input validation
+
+// Allowed pattern
+const SAFE_FILENAME = /^[A-Za-z0-9._\-\/]+$/;
+
+function sanitizeFilename(value) {
+  if (!SAFE_FILENAME.test(value)) {
+    throw new Error("Illegal characters in filename");
+  }
+  if (value.includes("..")) throw new Error("Path traversal attempt");
+  if (value.startsWith("/")) throw new Error("Absolute paths not allowed");
+  return value;
+}
+
 const BASE_DIR = path.resolve(__dirname, 'files');
 if (!fs.existsSync(BASE_DIR)) fs.mkdirSync(BASE_DIR, { recursive: true });
 
-// helper to canonicalize and check
 function resolveSafe(baseDir, userInput) {
-  try {
-    userInput = decodeURIComponent(userInput);
-  } catch (e) {}
+  try { userInput = decodeURIComponent(userInput); } catch (e) {}
   return path.resolve(baseDir, userInput);
 }
 
-// Secure route
+// route
+
 app.post(
   '/read',
   body('filename')
@@ -29,16 +50,14 @@ app.post(
     .isString()
     .trim()
     .notEmpty().withMessage('filename must not be empty')
-    .custom(value => {
-      if (value.includes('\0')) throw new Error('null byte not allowed');
-      return true;
-    }),
+    .custom(sanitizeFilename),
   (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
     const filename = req.body.filename;
     const normalized = resolveSafe(BASE_DIR, filename);
+
     if (!normalized.startsWith(BASE_DIR + path.sep)) {
       return res.status(403).json({ error: 'Path traversal detected' });
     }
@@ -49,7 +68,8 @@ app.post(
   }
 );
 
-// Vulnerable route (demo)
+// Vulnerable demo
+
 app.post('/read-no-validate', (req, res) => {
   const filename = req.body.filename || '';
   const joined = path.join(BASE_DIR, filename); // intentionally vulnerable
@@ -58,7 +78,8 @@ app.post('/read-no-validate', (req, res) => {
   res.json({ path: joined, content });
 });
 
-// Helper route for samples
+// helper route
+
 app.post('/setup-sample', (req, res) => {
   const samples = {
     'hello.txt': 'Hello from safe file!\n',
@@ -73,7 +94,7 @@ app.post('/setup-sample', (req, res) => {
   res.json({ ok: true, base: BASE_DIR });
 });
 
-// Only listen when run directly (not when imported by tests)
+// run
 if (require.main === module) {
   const port = process.env.PORT || 4000;
   app.listen(port, () => {
