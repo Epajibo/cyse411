@@ -85,8 +85,9 @@ function requireAuth(req, res, next) {
     return res.status(401).json({ authenticated: false });
   }
 
-  // sliding expiration
-  session.expires = Date.now() + 30 * 60 * 1000;
+  // expiration
+  const newExpires = Date.now() + 30 * 60 * 1000;
+  sessions[token] = makeSafeSession(session.userId, newExpires);
 
   req.userId = session.userId;
   next();
