@@ -3,6 +3,7 @@ const bodyParser = require("body-parser");
 const cookieParser = require("cookie-parser");
 const crypto = require("crypto");
 const bcrypt = require("bcrypt");
+const lusca = require("lusca");
 
 const app = express();
 const PORT = 3001;
@@ -10,8 +11,11 @@ const PORT = 3001;
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 app.use(cookieParser());
-app.use(express.static("public"));
 
+// Add CSRF protection middleware
+app.use(lusca.csrf());
+
+app.use(express.static("public"));
 /**
  * USER DB (now with bcrypt)
  * You MUST rehash the initial password with bcrypt.
