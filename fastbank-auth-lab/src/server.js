@@ -33,6 +33,14 @@ const users = [
 // token -> { userId, expires }
 const sessions = {};
 
+// fix prototype error
+function makeSafeSession(userId, expires) {
+  const session = Object.create(null);
+  session.userId = userId;
+  session.expires = expires;
+  return session;
+}
+
 /**
  * Helper: find user by username
  */
@@ -46,8 +54,7 @@ function findUser(username) {
 function createSession(userId) {
   const token = crypto.randomBytes(32).toString("hex");
   const expires = Date.now() + 30 * 60 * 1000; // 30 min
-  
-  sessions[token] = Object.assign(Object.create(null), { userId, expires });
+  sessions[token] = makeSafeSession(userId, expires);
   return token;
 }
 
@@ -71,36 +78,28 @@ function requireAuth(req, res, next) {
   const session = sessions[token];
   if (!session) return res.status(401).json({ authenticated: false });
 
-  // expired?
+
   if (Date.now() > session.expires) {
     delete sessions[token];
     res.clearCookie("session");
     return res.status(401).json({ authenticated: false });
   }
 
-  // optional sliding expiration
+  // sliding expiration
   session.expires = Date.now() + 30 * 60 * 1000;
 
   req.userId = session.userId;
   next();
 }
 
-/**
- * /api/me – now secure and checks expiration
+/** /api/me checks expiration
  */
 app.get("/api/me", requireAuth, (req, res) => {
   const user = users.find((u) => u.id === req.userId);
   res.json({ authenticated: true, username: user.username });
 });
 
-/**
- * SECURE LOGIN ENDPOINT
- * - bcrypt.compare()
- * - generic error
- * - secure random session token
- * - session rotation
- * - secure cookie flags
- * - session expiration
+/** SECURE LOGIN 
  */
 app.post("/api/login", async (req, res) => {
   const INVALID = () =>
