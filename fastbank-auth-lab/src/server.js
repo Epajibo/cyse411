@@ -46,8 +46,8 @@ function findUser(username) {
 function createSession(userId) {
   const token = crypto.randomBytes(32).toString("hex");
   const expires = Date.now() + 30 * 60 * 1000; // 30 min
-
-  sessions[token] = { userId, expires };
+  
+  sessions[token] = Object.assign(Object.create(null), { userId, expires });
   return token;
 }
 
